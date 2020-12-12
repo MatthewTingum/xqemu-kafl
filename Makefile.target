@@ -152,12 +152,13 @@ obj-y += arch_init.o cpus.o monitor.o gdbstub.o balloon.o ioport.o numa.o
 obj-y += qtest.o
 obj-y += hw/
 obj-y += qapi/
+obj-$(CONFIG_PROCESSOR_TRACE) += pt/memory_access.o pt/decoder.o pt/tnt_cache.o pt/disassembler.o pt/logger.o pt/hypercall.o pt/filter.o pt.o pt/interface.o
 obj-y += memory.o
 obj-y += memory_mapping.o
 obj-y += dump.o
 obj-$(TARGET_X86_64) += win_dump.o
 obj-y += migration/ram.o
-LIBS := $(libs_softmmu) $(LIBS)
+LIBS := $(libs_softmmu) $(LIBS) -lcapstone
 
 # Hardware support
 ifeq ($(TARGET_NAME), sparc64)
@@ -166,7 +167,7 @@ else
 obj-y += hw/$(TARGET_BASE_ARCH)/
 endif
 
-GENERATED_FILES += hmp-commands.h hmp-commands-info.h
+GENERATED_FILES += hmp-commands.h hmp-commands-info.h hmp-commands-pt.h
 
 endif # CONFIG_SOFTMMU
 
@@ -212,6 +213,9 @@ gdbstub-xml.c: $(TARGET_XML_FILES) $(SRC_PATH)/scripts/feature_to_c.sh
 
 hmp-commands.h: $(SRC_PATH)/hmp-commands.hx $(SRC_PATH)/scripts/hxtool
 	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"GEN","$(TARGET_DIR)$@")
+
+hmp-commands-pt.h: $(SRC_PATH)/hmp-commands-pt.hx
+    $(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"  GEN   $(TARGET_DIR)$@")
 
 hmp-commands-info.h: $(SRC_PATH)/hmp-commands-info.hx $(SRC_PATH)/scripts/hxtool
 	$(call quiet-command,sh $(SRC_PATH)/scripts/hxtool -h < $< > $@,"GEN","$(TARGET_DIR)$@")
