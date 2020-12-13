@@ -1961,7 +1961,8 @@ static bool main_loop_should_exit(void)
     if (qemu_reload_requested()){
         if(loadvm_global){
             vm_stop(RUN_STATE_RESTORE_VM);
-            if (load_vmstate(loadvm_global) == 0){
+            Error *local_err = NULL;
+            if (load_snapshot(loadvm_global, &local_err) == 0){
                 vm_start();
             }
             return false;

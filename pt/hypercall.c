@@ -355,5 +355,5 @@ void handle_hypercall_kafl_info(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
 		hypercall_snd_char(KAFL_PROTO_INFO);
 	}
-	qemu_system_shutdown_request();
+	qemu_system_shutdown_request(SHUTDOWN_CAUSE_HOST_SIGNAL);
 }
