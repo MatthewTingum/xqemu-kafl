@@ -412,6 +412,30 @@ struct CPUState {
      */
     MMUAccessType mem_io_access_type;
 
+#ifdef CONFIG_PROCESSOR_TRACE
+    volatile int pt_cmd;
+    volatile uint64_t pt_arg;
+    volatile int pt_ret;
+    volatile bool pt_enabled;
+
+    int pt_fd;
+    void* pt_mmap;
+
+    volatile uint32_t overflow_counter;
+    volatile uint64_t trace_size;
+
+    uint64_t pt_features;
+
+    volatile bool pt_ip_filter_enabled[4];
+    uint64_t pt_ip_filter_a[4];
+    uint64_t pt_ip_filter_b[4];
+    void* pt_decoder_state[4];
+    uint64_t pt_c3_filter;
+
+    FILE *pt_target_file;
+    bool reload_pending;
+#endif
+
     int kvm_fd;
     struct KVMState *kvm_state;
     struct kvm_run *kvm_run;
