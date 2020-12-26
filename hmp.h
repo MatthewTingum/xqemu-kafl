@@ -17,6 +17,17 @@
 #include "qemu-common.h"
 #include "qemu/readline.h"
 
+#ifdef CONFIG_PROCESSOR_TRACE
+void hmp_pt_enable(Monitor *mon, const QDict *qdict);
+void hmp_pt_disable(Monitor *mon, const QDict *qdict);
+void hmp_pt_enable_all(Monitor *mon, const QDict *qdict);
+void hmp_pt_disable_all(Monitor *mon, const QDict *qdict);
+void hmp_pt_status(Monitor *mon, const QDict *qdict);
+void hmp_pt_status_all(Monitor *mon, const QDict *qdict);
+void hmp_pt_ip_filtering(Monitor *mon, const QDict *qdict);
+void hmp_pt_set_file(Monitor *mon, const QDict *qdict);
+#endif
+
 void hmp_info_name(Monitor *mon, const QDict *qdict);
 void hmp_info_version(Monitor *mon, const QDict *qdict);
 void hmp_info_kvm(Monitor *mon, const QDict *qdict);

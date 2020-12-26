@@ -276,6 +276,9 @@ static int mon_refcount;
 
 static mon_cmd_t mon_cmds[];
 static mon_cmd_t info_cmds[];
+#if defined(CONFIG_PROCESSOR_TRACE)
+static mon_cmd_t hmp_pt_cmds[];
+#endif
 
 QmpCommandList qmp_commands, qmp_cap_negotiation_commands;
 
@@ -2652,6 +2655,13 @@ static mon_cmd_t info_cmds[] = {
 #include "hmp-commands-info.h"
     { NULL, NULL, },
 };
+
+#if defined(CONFIG_PROCESSOR_TRACE)
+static mon_cmd_t hmp_pt_cmds[] = {
+#include "hmp-commands-pt.h"
+    { NULL, NULL, },
+};
+#endif
 
 /* mon_cmds and info_cmds would be sorted at runtime */
 static mon_cmd_t mon_cmds[] = {

@@ -129,6 +129,13 @@ int main(int argc, char **argv)
 #include "qapi/qmp/qerror.h"
 #include "sysemu/iothread.h"
 
+#ifdef CONFIG_PROCESSOR_TRACE
+#include "pt.h"
+#include "pt/hypercall.h"
+#include "pt/synchronization.h"
+extern void qemu_system_reload_request(void);
+#endif
+
 #define MAX_VIRTIO_CONSOLES 1
 
 static const char *data_dir[16];
@@ -1606,6 +1613,11 @@ void vm_state_notify(int running, RunState state)
     }
 }
 
+#ifdef CONFIG_PROCESSOR_TRACE
+static int reload_requested;
+char* loadvm_global = NULL;
+#endif
+
 static ShutdownCause reset_requested;
 static ShutdownCause shutdown_requested;
 static int shutdown_signal;
@@ -1700,6 +1712,15 @@ static int qemu_debug_requested(void)
     return r;
 }
 
+#ifdef CONFIG_PROCESSOR_TRACE
+static int qemu_reload_requested(void)
+{
+    int r = reload_requested;
+    reload_requested = 0;
+    return r;
+}
+#endif
+
 void qemu_exit_preconfig_request(void)
 {
     preconfig_exit_requested = true;
@@ -1766,6 +1787,12 @@ void qemu_system_guest_panicked(GuestPanicInformation *info)
 
 void qemu_system_reset_request(ShutdownCause reason)
 {
+#ifdef CONFIG_PROCESSOR_TRACE
+        if (kvm_enabled()) {
+                synchronization_unlock();
+                pt_disable(qemu_get_cpu(0), false);
+        }
+#endif
     if (no_reboot && reason != SHUTDOWN_CAUSE_SUBSYSTEM_RESET) {
         shutdown_requested = reason;
     } else {
@@ -1774,6 +1801,19 @@ void qemu_system_reset_request(ShutdownCause reason)
     cpu_stop_current();
     qemu_notify_event();
 }
+
+#ifdef CONFIG_PROCESSOR_TRACE
+void qemu_system_reload_request(void)
+{
+    if (kvm_enabled()) {
+        synchronization_unlock();
+        pt_disable(qemu_get_cpu(0), false);
+    }
+    reload_requested = 1;
+    cpu_stop_current();
+    qemu_notify_event();
+}
+#endif
 
 static void qemu_system_suspend(void)
 {
@@ -1785,6 +1825,12 @@ static void qemu_system_suspend(void)
 
 void qemu_system_suspend_request(void)
 {
+#ifdef CONFIG_PROCESSOR_TRACE
+    if (kvm_enabled()) {
+        synchronization_unlock();
+        pt_disable(qemu_get_cpu(0), false);
+    }
+#endif
     if (runstate_check(RUN_STATE_SUSPENDED)) {
         return;
     }
@@ -1862,6 +1908,12 @@ void qemu_system_killed(int signal, pid_t pid)
 
 void qemu_system_shutdown_request(ShutdownCause reason)
 {
+#ifdef CONFIG_PROCESSOR_TRACE
+        if (kvm_enabled()) {
+                synchronization_unlock();
+                pt_disable(qemu_get_cpu(0), false);
+        }
+#endif
     trace_qemu_system_shutdown_request(reason);
     replay_shutdown_request(reason);
     shutdown_requested = reason;
@@ -1907,6 +1959,21 @@ static bool main_loop_should_exit(void)
 {
     RunState r;
     ShutdownCause request;
+
+#ifdef CONFIG_PROCESSOR_TRACE
+    if (qemu_reload_requested()){
+        if(loadvm_global){
+                vm_stop(RUN_STATE_RESTORE_VM);
+                Error *local_err = NULL;
+                if (load_snapshot(loadvm_global, &local_err) == 0){
+                    vm_start();
+                } else {
+                    error_reportf_err(local_err, "Error: ");
+                }
+                return false;
+            }
+        }
+#endif
 
     if (preconfig_exit_requested) {
         if (runstate_check(RUN_STATE_PRECONFIG)) {
@@ -1976,7 +2043,7 @@ static void main_loop(void)
 
 static void version(void)
 {
-    printf("QEMU emulator version " QEMU_FULL_VERSION "\n"
+    printf("QEMU-PT emulator version " QEMU_VERSION " (xkAFL) (RQ)\n"
            QEMU_COPYRIGHT "\n");
 }
 
@@ -3567,6 +3634,9 @@ int main(int argc, char **argv, char **envp)
                 break;
             case QEMU_OPTION_loadvm:
                 loadvm = optarg;
+#ifdef CONFIG_PROCESSOR_TRACE
+                loadvm_global = (char*)optarg;
+#endif
                 break;
             case QEMU_OPTION_full_screen:
                 dpy.has_full_screen = true;
