@@ -78,7 +78,7 @@ void pt_setup_bitmap(void* ptr){
 void pt_reset_bitmap(void){
 	if(bitmap){
 		last_ip = 0ULL;
-		memset(bitmap, 0xff, kafl_bitmap_size);
+		memset(bitmap, 0x00, kafl_bitmap_size);
 	}
 }
 
