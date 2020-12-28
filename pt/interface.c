@@ -211,8 +211,8 @@ static int kafl_guest_create_memory_bar(kafl_mem_state *s, int region_num, uint6
 	assert(ftruncate(fd, bar_size) == 0);
 	stat(file, &st);
 	QEMU_PT_DEBUG(INTERFACE_PREFIX, "new shm file: (max size: %lx) %lx", bar_size, st.st_size);
-	
-	assert(bar_size == st.st_size);
+
+	assert(bar_size >= st.st_size);
 	ptr = mmap(0, bar_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
 	if (ptr == MAP_FAILED) {
 		error_setg_errno(errp, errno, "Failed to mmap memory");
@@ -231,7 +231,7 @@ static int kafl_guest_create_memory_bar(kafl_mem_state *s, int region_num, uint6
 	return 0;
 }
 
-static void kafl_guest_setup_bitmap(kafl_mem_state *s, uint32_t bitmap_size){
+static int kafl_guest_setup_bitmap(kafl_mem_state *s, uint32_t bitmap_size, Error **errp){
 	void * ptr;
 	int fd;
 	struct stat st;
@@ -241,7 +241,13 @@ static void kafl_guest_setup_bitmap(kafl_mem_state *s, uint32_t bitmap_size){
 	stat(s->bitmap_file, &st);
 	assert(bitmap_size == st.st_size);
 	ptr = mmap(0, bitmap_size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+	if (ptr == MAP_FAILED) {
+		error_setg_errno(errp, errno, "Failed to mmap memory");
+		return -1;
+	}
 	pt_setup_bitmap((void*)ptr);
+
+	return 0;
 }
 
 static void* kafl_guest_setup_filter_bitmap(kafl_mem_state *s, char* filter, uint64_t size){
@@ -285,7 +291,7 @@ static void pci_kafl_guest_realize(DeviceState *dev, Error **errp){
 	if(&s->chr)
 		qemu_chr_fe_set_handlers(&s->chr, kafl_guest_can_receive, kafl_guest_receive, kafl_guest_event, NULL, s, NULL, true);
 	if(s->bitmap_file)
-		kafl_guest_setup_bitmap(s, kafl_bitmap_size);
+		kafl_guest_setup_bitmap(s, kafl_bitmap_size, errp);
 
 	for(uint8_t i = 0; i < INTEL_PT_MAX_RANGES; i++){
 		if(s->ip_filter[i][0] && s->ip_filter[i][1]){
