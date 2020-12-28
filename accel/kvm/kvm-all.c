@@ -2135,7 +2135,6 @@ int kvm_cpu_exec(CPUState *cpu)
         case KVM_EXIT_KAFL_PRINTK:
             handle_hypercall_kafl_printk(run, cpu);
             ret = 0;
-            break;
 
         /* user space only exit reasons */
         case KVM_EXIT_KAFL_USER_RANGE_ADVISE:
@@ -2162,7 +2161,7 @@ int kvm_cpu_exec(CPUState *cpu)
             ret = 0;
             break;
 
-#ifdef CONFIG_REDQUEEN                                                                                                                                                    
+#ifdef CONFIG_REDQUEEN
         case KVM_EXIT_DEBUG:
             kvm_arch_get_registers(cpu);
             if(!handle_hypercall_kafl_hook(run, cpu)){
@@ -2203,7 +2202,7 @@ int kvm_cpu_exec(CPUState *cpu)
             ret = kvm_arch_handle_exit(cpu, run);
             break;
         }
-#ifdef CONFIG_PROCESSOR_TRACE                                                                                                                                                
+#ifdef CONFIG_PROCESSOR_TRACE
             pt_post_kvm_run(cpu);
 #endif
     } while (ret == 0);

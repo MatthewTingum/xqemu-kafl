@@ -230,10 +230,10 @@ bool handle_hypercall_kafl_next_payload(struct kvm_run *run, CPUState *cpu){
 				pt_reset_bitmap();
 				/* decrease RIP value by vmcall instruction size */
 				X86CPU *x86_cpu = X86_CPU(cpu);
-	    		CPUX86State *env = &x86_cpu->env;
-	    		kvm_cpu_synchronize_state(cpu);
-	    		env->eip -= 3; /* vmcall size */
-	    		kvm_arch_put_registers(cpu, KVM_PUT_FULL_STATE);
+				CPUX86State *env = &x86_cpu->env;
+				kvm_cpu_synchronize_state(cpu);
+				env->eip -= 3; /* vmcall size */
+				kvm_arch_put_registers(cpu, KVM_PUT_FULL_STATE);
 
 				setup_snapshot_once = true;
 				for(int i = 0; i < INTEL_PT_MAX_RANGES; i++){
@@ -271,7 +271,7 @@ void handle_hypercall_kafl_acquire(struct kvm_run *run, CPUState *cpu){
 void handle_hypercall_get_payload(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
 		if(payload_buffer){
-			QEMU_PT_PRINTF(CORE_PREFIX, "Payload Address:\t%llx", run->hypercall.args[0]);
+			QEMU_PT_PRINTF(CORE_PREFIX, "Got payload address:\t%llx", run->hypercall.args[0]);
 			payload_buffer_guest = (void*)run->hypercall.args[0];
 			write_virtual_memory((uint64_t)payload_buffer_guest, payload_buffer, PAYLOAD_SIZE, cpu);
 		}
@@ -281,7 +281,7 @@ void handle_hypercall_get_payload(struct kvm_run *run, CPUState *cpu){
 void handle_hypercall_get_program(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
 		if(program_buffer){
-			QEMU_PT_PRINTF(CORE_PREFIX, "Program Address:\t%llx", run->hypercall.args[0]);
+			QEMU_PT_PRINTF(CORE_PREFIX, "Got program address:\t%llx", run->hypercall.args[0]);
 			write_virtual_memory((uint64_t)run->hypercall.args[0], program_buffer, PROGRAM_SIZE, cpu);
 		}
 	}
@@ -303,15 +303,15 @@ void handle_hypercall_kafl_release(struct kvm_run *run, CPUState *cpu){
 
 void handle_hypercall_kafl_cr3(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-		QEMU_PT_PRINTF(CORE_PREFIX, "CR3 address:\t\t%llx", run->hypercall.args[0]);
+		QEMU_PT_PRINTF(CORE_PREFIX, "Got CR3 address:\t\t%llx", run->hypercall.args[0]);
 		pt_set_cr3(cpu, run->hypercall.args[0], false);
 
 		if (cpu->disassembler_word_width == 0) {
 			if (run->hypercall.longmode) {
-				QEMU_PT_PRINTF(CORE_PREFIX, "Setting arch=64 (longmode=%d)\n", run->hypercall.longmode);
+				QEMU_PT_PRINTF(CORE_PREFIX, "Auto-detected word width as 64bit (longmode=%d)", run->hypercall.longmode);
 				cpu->disassembler_word_width = 64;
 			} else {
-				QEMU_PT_PRINTF(CORE_PREFIX, "Setting arch=32 (longmode=%d)\n", run->hypercall.longmode);
+				QEMU_PT_PRINTF(CORE_PREFIX, "Auto-detected word width as 32bit (longmode=%d)", run->hypercall.longmode);
 				cpu->disassembler_word_width = 32;
 			}
 		}
@@ -320,7 +320,7 @@ void handle_hypercall_kafl_cr3(struct kvm_run *run, CPUState *cpu){
 
 void handle_hypercall_kafl_submit_panic(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-		QEMU_PT_PRINTF(CORE_PREFIX, "Patching PANIC address:\t%llx, longmode=%x\n", run->hypercall.args[0], run->hypercall.longmode);
+		QEMU_PT_PRINTF(CORE_PREFIX, "Patching PANIC address:\t%llx, longmode=%x", run->hypercall.args[0], run->hypercall.longmode);
 		if(notifiers_enabled){
 			if (run->hypercall.longmode) {
 				write_virtual_memory(run->hypercall.args[0], (uint8_t*)PANIC_PAYLOAD_64, PAYLOAD_BUFFER_SIZE, cpu);
@@ -333,7 +333,7 @@ void handle_hypercall_kafl_submit_panic(struct kvm_run *run, CPUState *cpu){
 
 void handle_hypercall_kafl_submit_kasan(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-		QEMU_PT_PRINTF(CORE_PREFIX, "Patching kASAN address:\t%llx, longmode=%x\n", run->hypercall.args[0], run->hypercall.longmode);
+		QEMU_PT_PRINTF(CORE_PREFIX, "Patching kASAN address:\t%llx, longmode=%x", run->hypercall.args[0], run->hypercall.longmode);
 		if(notifiers_enabled){
 			if (run->hypercall.longmode){
 				write_virtual_memory(run->hypercall.args[0], (uint8_t*)KASAN_PAYLOAD_64, PAYLOAD_BUFFER_SIZE, cpu);
@@ -351,15 +351,14 @@ void handle_hypercall_kafl_panic(struct kvm_run *run, CPUState *cpu){
 		} else{
 			QEMU_PT_DEBUG(CORE_PREFIX, "Panic in kernel mode!");
 		}
-    QEMU_PT_PRINTF(CORE_PREFIX, "Panic detected during initialization of stage 1 or stage 2 loader");
-    hypercall_snd_char(KAFL_PROTO_CRASH);
+		hypercall_snd_char(KAFL_PROTO_CRASH);
 	}
 }
 
 void handle_hypercall_kafl_timeout(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-    QEMU_PT_PRINTF(CORE_PREFIX, "Timeout detected during initialization of stage 1 or stage 2 loader");
-    hypercall_snd_char(KAFL_PROTO_TIMEOUT);
+		QEMU_PT_DEBUG(CORE_PREFIX, "Timeout detected!");
+		hypercall_snd_char(KAFL_PROTO_TIMEOUT);
 	}
 }
 
@@ -370,8 +369,7 @@ void handle_hypercall_kafl_kasan(struct kvm_run *run, CPUState *cpu){
 		} else{
 			QEMU_PT_DEBUG(CORE_PREFIX, "ASan notification in kernel mode!");
 		}
-    QEMU_PT_PRINTF(CORE_PREFIX, "KASAN detected during initialization of stage 1 or stage 2 loader");
-    hypercall_snd_char(KAFL_PROTO_KASAN);
+		hypercall_snd_char(KAFL_PROTO_KASAN);
 	}
 }
 
@@ -380,7 +378,7 @@ void handle_hypercall_kafl_lock(struct kvm_run *run, CPUState *cpu){
 		Error *err = NULL;
 		QEMU_PT_PRINTF(CORE_PREFIX, "Creating snapshot <kafl> ...");
 		qemu_mutex_lock_iothread();
-	    kvm_cpu_synchronize_state(qemu_get_cpu(0));
+		kvm_cpu_synchronize_state(qemu_get_cpu(0));
 		save_snapshot("kafl", &err);
         if (err)
             error_reportf_err(err, "Error: ");
@@ -412,7 +410,7 @@ void enable_notifies(void){
 }
 
 void enable_reload_mode(void){
-  assert(false);
+    assert(false);
 }
 
 void hprintf(char* msg){
@@ -427,8 +425,7 @@ void hprintf(char* msg){
 			hypercall_snd_char(KAFL_PROTO_PRINTF);
 		}
 		hprintf_counter++;
-
-	}		
+	}
 }
 
 void handle_hypercall_kafl_printf(struct kvm_run *run, CPUState *cpu){
@@ -475,19 +472,19 @@ void handle_hypercall_kafl_user_submit_mode(struct kvm_run *run, CPUState *cpu){
 	//printf("%s\n", __func__);
 	switch((uint64_t)run->hypercall.args[0]){
 		case KAFL_MODE_64:
-			QEMU_PT_PRINTF(CORE_PREFIX, "target runs in KAFL_MODE_64 ...");
+			QEMU_PT_PRINTF(CORE_PREFIX, "Target reports 64bit word width");
 			cpu->disassembler_word_width = 64;
 			break;
 		case KAFL_MODE_32:
-			QEMU_PT_PRINTF(CORE_PREFIX, "target runs in KAFL_MODE_32 ...");
+			QEMU_PT_PRINTF(CORE_PREFIX, "Target reports 32bit word width");
 			cpu->disassembler_word_width = 32;
 			break;
 		case KAFL_MODE_16:
-			QEMU_PT_PRINTF(CORE_PREFIX, "target runs in KAFL_MODE_16 ...");
+			QEMU_PT_PRINTF(CORE_PREFIX, "Target reports 16bit word width");
 			cpu->disassembler_word_width = 16;
 			break;
 		default:
-			QEMU_PT_ERROR(CORE_PREFIX, "Error: target uses unknown word width..");
+			QEMU_PT_ERROR(CORE_PREFIX, "Error: target uses unknown word width!");
 			cpu->disassembler_word_width = -1;
 			break;
 	}

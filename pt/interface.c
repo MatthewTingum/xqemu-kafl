@@ -132,7 +132,7 @@ static void kafl_guest_receive(void *opaque, const uint8_t * buf, int size){
 				
 			/* enable redqueen intercept mode */
 			case KAFL_PROTO_ENABLE_RQI_MODE:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto enable rqi");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto enable rqi");
 				assert(qemu_get_cpu(0)->redqueen_instrumentation_mode != REDQUEEN_NO_INSTRUMENTATION);
 				pt_enable_rqi(qemu_get_cpu(0));
 				send_char(KAFL_PROTO_ENABLE_RQI_MODE, s);
@@ -140,7 +140,7 @@ static void kafl_guest_receive(void *opaque, const uint8_t * buf, int size){
 
 			/* disable redqueen intercept mode */
 			case KAFL_PROTO_DISABLE_RQI_MODE:
-				 //QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto disable rqi");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto disable rqi");
 				pt_set_redqueen_instrumentation_mode(qemu_get_cpu(0),REDQUEEN_NO_INSTRUMENTATION);
 				pt_set_redqueen_update_blacklist(qemu_get_cpu(0), false);
 				pt_disable_rqi(qemu_get_cpu(0));
@@ -148,52 +148,52 @@ static void kafl_guest_receive(void *opaque, const uint8_t * buf, int size){
 				break;
 
 			case KAFL_PROTO_REDQUEEN_SET_LIGHT_INSTRUMENTATION:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto set light");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto set light");
 				pt_set_redqueen_instrumentation_mode(qemu_get_cpu(0),REDQUEEN_LIGHT_INSTRUMENTATION);
 				send_char(KAFL_PROTO_REDQUEEN_SET_LIGHT_INSTRUMENTATION, s);
 				break;
 
 			case KAFL_PROTO_REDQUEEN_SET_SE_INSTRUMENTATION:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto set se");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto set se");
 				pt_set_redqueen_instrumentation_mode(qemu_get_cpu(0),REDQUEEN_SE_INSTRUMENTATION);
 				send_char(KAFL_PROTO_REDQUEEN_SET_SE_INSTRUMENTATION, s);
 				break;
 
 			case KAFL_PROTO_REDQUEEN_SET_WHITELIST_INSTRUMENTATION:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto set whitelist");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto set whitelist");
 				pt_set_redqueen_instrumentation_mode(qemu_get_cpu(0),REDQUEEN_WHITELIST_INSTRUMENTATION);
 				send_char(KAFL_PROTO_REDQUEEN_SET_WHITELIST_INSTRUMENTATION, s);
 				break;
 
 			case KAFL_PROTO_REDQUEEN_SET_BLACKLIST:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto set blacklist");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto set blacklist");
 				pt_set_redqueen_update_blacklist(qemu_get_cpu(0), true);
 				send_char(KAFL_PROTO_REDQUEEN_SET_BLACKLIST, s);
 				break;
 
 			/* enable symbolic execution mode */
 			case KAFL_PROTO_ENABLE_TRACE_MODE:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto enable trace");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto enable trace");
 				pt_enable_rqi_trace(qemu_get_cpu(0));
 				send_char(KAFL_PROTO_ENABLE_TRACE_MODE, s);
 				break;
 
 			/* disable symbolic execution mode */
 			case KAFL_PROTO_DISABLE_TRACE_MODE:
- 				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto disable trace");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto disable trace");
 				pt_disable_rqi_trace(qemu_get_cpu(0));
 				send_char(KAFL_PROTO_DISABLE_TRACE_MODE, s);
 				break;
 			/* apply patches to target */
 			case KAFL_PROTO_ENABLE_PATCHES:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto patches enable");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto patches enable");
 				pt_set_enable_patches_pending(qemu_get_cpu(0));
 				send_char(KAFL_PROTO_ENABLE_PATCHES, s);
 				break;
 
 			/* remove all patches from the target */
 			case KAFL_PROTO_DISABLE_PATCHES:
-				//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "proto patches disable");
+				QEMU_PT_DEBUG(REDQUEEN_PREFIX, "proto patches disable");
 				pt_set_disable_patches_pending(qemu_get_cpu(0));
 				send_char(KAFL_PROTO_DISABLE_PATCHES, s);
 				break;
@@ -210,7 +210,7 @@ static int kafl_guest_create_memory_bar(kafl_mem_state *s, int region_num, uint6
 	fd = open(file, O_CREAT|O_RDWR, S_IRWXU|S_IRWXG|S_IRWXO);
 	assert(ftruncate(fd, bar_size) == 0);
 	stat(file, &st);
-	QEMU_PT_PRINTF(INTERFACE_PREFIX, "new shm file: (max size: %lx) %lx", bar_size, st.st_size);
+	QEMU_PT_DEBUG(INTERFACE_PREFIX, "new shm file: (max size: %lx) %lx", bar_size, st.st_size);
 	
 	assert(bar_size == st.st_size);
 	ptr = mmap(0, bar_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd, 0);
@@ -248,15 +248,15 @@ static void* kafl_guest_setup_filter_bitmap(kafl_mem_state *s, char* filter, uin
 	void * ptr;
 	int fd;
 	struct stat st;
-	
-	QEMU_PT_PRINTF(INTERFACE_PREFIX, "setup filter file: %s", filter);
+
+	QEMU_PT_DEBUG(INTERFACE_PREFIX, "setup filter file: %s", filter);
 	fd = open(filter, O_CREAT|O_RDWR, S_IRWXU|S_IRWXG|S_IRWXO);
 	stat(filter, &st);
 	if (st.st_size != size){
 		assert(ftruncate(fd, size) == 0);
 	}
 	ptr = mmap(NULL, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
-	QEMU_PT_PRINTF(INTERFACE_PREFIX, "filter file size: %lx (addr: %p)", size, ptr);
+	QEMU_PT_DEBUG(INTERFACE_PREFIX, "filter file size: %lx (addr: %p)", size, ptr);
 	return ptr;
 	//pt_setup_bitmap((void*)ptr);
 }
@@ -326,7 +326,7 @@ static void pci_kafl_guest_realize(DeviceState *dev, Error **errp){
 
 
 	pt_setup_enable_hypercalls();
-  asm_decoder_compile();
+	asm_decoder_compile();
 }
 
 static Property kafl_guest_properties[] = {
