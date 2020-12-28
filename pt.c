@@ -45,7 +45,7 @@ void pt_sync(void){
 static inline int pt_cmd_hmp_context(CPUState *cpu, uint64_t cmd){
 	cpu->pt_ret = -1;
 	if(pt_hypercalls_enabled()){
-		QEMU_PT_PRINTF(PT_PREFIX, "Error: HMP commands are ignored if kafl tracing mode is enabled (-kafl)!");
+		QEMU_PT_ERROR(PT_PREFIX, "Error: HMP commands are ignored if kafl tracing mode is enabled (-kafl)!");
 	}
 	else{
 		cpu->pt_cmd = cmd;
@@ -171,7 +171,7 @@ int pt_set_cr3(CPUState *cpu, uint64_t val, bool hmp_mode){
 		return -EINVAL;
 	}
 	if (cpu->pt_c3_filter && cpu->pt_c3_filter != val){
-		//QEMU_PT_PRINTF(PT_PREFIX, "Reconfigure CR3-Filtering!");
+		QEMU_PT_DEBUG(PT_PREFIX, "Reconfigure CR3-Filtering!");
 		cpu->pt_c3_filter = val;
 		r += pt_cmd(cpu, KVM_VMX_PT_CONFIGURE_CR3, hmp_mode);
 		return r;
@@ -199,7 +199,7 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 	}
 		
 	if(ip_a > ip_b){
-		QEMU_PT_PRINTF(PT_PREFIX, "Error (ip_a > ip_b) 0x%lx-0x%lx", ip_a, ip_b);
+		QEMU_PT_ERROR(PT_PREFIX, "Error (ip_a > ip_b) 0x%lx-0x%lx", ip_a, ip_b);
 		return -EINVAL;
 	}
 
@@ -207,9 +207,9 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 		pt_disable_ip_filtering(cpu, addrn, hmp_mode);
 	}
 
-	buf = malloc(ip_b-ip_a);
+	buf = malloc(ip_b-ip_a); // TODO: TODO memory leak?
 	if(!read_virtual_memory(ip_a, buf, ip_b-ip_a, cpu)){
-		QEMU_PT_PRINTF(PT_PREFIX, "Error (cannot dump trace region) 0x%lx-0x%lx (size: %lx)", ip_a, ip_b, (ip_b-ip_a));
+		QEMU_PT_ERROR(PT_PREFIX, "Error (cannot dump trace region) 0x%lx-0x%lx (size: %lx)", ip_a, ip_b, (ip_b-ip_a));
 		free(buf);
 		return -EINVAL;
 	}
@@ -226,7 +226,7 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 #endif
 
 
-	QEMU_PT_PRINTF(PT_PREFIX, "Configuring new trace region (addr%d, 0x%lx-0x%lx)", addrn, ip_a, ip_b);
+	QEMU_PT_ERROR(PT_PREFIX, "Configuring new trace region (addr%d, 0x%lx-0x%lx)", addrn, ip_a, ip_b);
 	
 	switch(addrn){
 		case 0:
@@ -302,7 +302,9 @@ void pt_kvm_init(CPUState *cpu){
 
 	cpu->patches_enable_pending = false;//TODO don't enable this
 	cpu->patches_disable_pending = false;
-	cpu->disassembler_word_width = 64;
+	// setting the target's word with is critical to RQ operation
+	// Initialize as invalid, set by submit_CR3 or submit_mode hypercalls
+	cpu->disassembler_word_width = 0;
 
 	cpu->pt_c3_filter = 0;
 	cpu->pt_target_file = NULL;
@@ -327,14 +329,14 @@ void pt_pre_kvm_run(CPUState *cpu){
 #ifdef CONFIG_REDQUEEN
 
 	if(cpu->patches_disable_pending){
-		//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "patches disable");
+		QEMU_PT_DEBUG(REDQUEEN_PREFIX, "patches disable");
 		patcher_t* patcher = qemu_get_cpu(0)->redqueen_patch_state;
 		pt_disable_patches(patcher);
 		cpu->patches_disable_pending = false;
 	}
 
 	if(cpu->patches_enable_pending){
-		//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "patches enable");
+		QEMU_PT_DEBUG(REDQUEEN_PREFIX, "patches enable");
 		patcher_t* patcher = qemu_get_cpu(0)->redqueen_patch_state;
 		pt_enable_patches(patcher);
 		cpu->patches_enable_pending = false;
@@ -342,7 +344,7 @@ void pt_pre_kvm_run(CPUState *cpu){
 
 
 	if(cpu->redqueen_enable_pending){
-		//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "rq enable");
+		QEMU_PT_DEBUG(REDQUEEN_PREFIX, "rq enable");
 		for(uint8_t i = 0; i < INTEL_PT_MAX_RANGES; i++){
 			if (cpu->redqueen_state[i]){
 				enable_rq_intercept_mode(cpu->redqueen_state[i]);
@@ -353,7 +355,7 @@ void pt_pre_kvm_run(CPUState *cpu){
 	}
 
 	if(cpu->redqueen_disable_pending){
-		//QEMU_PT_PRINTF(REDQUEEN_PREFIX, "rq disable");
+		QEMU_PT_DEBUG(REDQUEEN_PREFIX, "rq disable");
 		for(uint8_t i = 0; i < INTEL_PT_MAX_RANGES; i++){
 			if (cpu->redqueen_state[i]){
 				disable_rq_intercept_mode(cpu->redqueen_state[i]);
@@ -366,7 +368,7 @@ void pt_pre_kvm_run(CPUState *cpu){
 	if (!cpu->pt_fd) {
 		cpu->pt_fd = kvm_vcpu_ioctl(cpu, KVM_VMX_PT_SETUP_FD, (unsigned long)0);
 		ret = ioctl(cpu->pt_fd, KVM_VMX_PT_GET_TOPA_SIZE, (unsigned long)0x0);
-		//printf("TOPA SIZE: %lx\n", ret);
+		QEMU_PT_DEBUG(PT_PREFIX, "TOPA SIZE: %x\n", ret);
 		cpu->pt_mmap = mmap(0, ret, PROT_READ, MAP_SHARED, cpu->pt_fd, 0);
 	}
 	
@@ -386,7 +388,7 @@ void pt_pre_kvm_run(CPUState *cpu){
 				if (cpu->pt_fd){
 					ret = ioctl(cpu->pt_fd, cpu->pt_cmd, cpu->pt_arg);
 					if (ret > 0){
-						//QEMU_PT_PRINTF(PT_PREFIX, "KVM_VMX_PT_DISABLE %d", ret);
+						QEMU_PT_DEBUG(PT_PREFIX, "KVM_VMX_PT_DISABLE %d", ret);
 						pt_dump(cpu, ret);
 						cpu->pt_enabled = false;
 					}

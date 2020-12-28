@@ -271,7 +271,7 @@ void handle_hypercall_kafl_acquire(struct kvm_run *run, CPUState *cpu){
 void handle_hypercall_get_payload(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
 		if(payload_buffer){
-			QEMU_PT_PRINTF(CORE_PREFIX, "Payload Address:\t%lx", (uint64_t)run->hypercall.args[0]);
+			QEMU_PT_PRINTF(CORE_PREFIX, "Payload Address:\t%llx", run->hypercall.args[0]);
 			payload_buffer_guest = (void*)run->hypercall.args[0];
 			write_virtual_memory((uint64_t)payload_buffer_guest, payload_buffer, PAYLOAD_SIZE, cpu);
 		}
@@ -281,7 +281,7 @@ void handle_hypercall_get_payload(struct kvm_run *run, CPUState *cpu){
 void handle_hypercall_get_program(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
 		if(program_buffer){
-			QEMU_PT_PRINTF(CORE_PREFIX, "Program Address:\t%lx", (uint64_t)run->hypercall.args[0]);
+			QEMU_PT_PRINTF(CORE_PREFIX, "Program Address:\t%llx", run->hypercall.args[0]);
 			write_virtual_memory((uint64_t)run->hypercall.args[0], program_buffer, PROGRAM_SIZE, cpu);
 		}
 	}
@@ -303,8 +303,18 @@ void handle_hypercall_kafl_release(struct kvm_run *run, CPUState *cpu){
 
 void handle_hypercall_kafl_cr3(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-		//QEMU_PT_PRINTF(CORE_PREFIX, "CR3 address:\t\t%lx", (uint64_t)run->hypercall.args[0]);
+		QEMU_PT_PRINTF(CORE_PREFIX, "CR3 address:\t\t%llx", run->hypercall.args[0]);
 		pt_set_cr3(cpu, run->hypercall.args[0], false);
+
+		if (cpu->disassembler_word_width == 0) {
+			if (run->hypercall.longmode) {
+				QEMU_PT_PRINTF(CORE_PREFIX, "Setting arch=64 (longmode=%d)\n", run->hypercall.longmode);
+				cpu->disassembler_word_width = 64;
+			} else {
+				QEMU_PT_PRINTF(CORE_PREFIX, "Setting arch=32 (longmode=%d)\n", run->hypercall.longmode);
+				cpu->disassembler_word_width = 32;
+			}
+		}
 	}
 }
 
@@ -336,13 +346,11 @@ void handle_hypercall_kafl_submit_kasan(struct kvm_run *run, CPUState *cpu){
 
 void handle_hypercall_kafl_panic(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-#ifdef PANIC_DEBUG
-		if(cpu, run->hypercall.args[0]){
-			QEMU_PT_PRINTF(CORE_PREFIX, "Panic in user mode!");
+		if(run->hypercall.args[0]){
+			QEMU_PT_DEBUG(CORE_PREFIX, "Panic in user mode!");
 		} else{
-			QEMU_PT_PRINTF(CORE_PREFIX, "Panic in kernel mode!");
+			QEMU_PT_DEBUG(CORE_PREFIX, "Panic in kernel mode!");
 		}
-#endif
     QEMU_PT_PRINTF(CORE_PREFIX, "Panic detected during initialization of stage 1 or stage 2 loader");
     hypercall_snd_char(KAFL_PROTO_CRASH);
 	}
@@ -357,13 +365,11 @@ void handle_hypercall_kafl_timeout(struct kvm_run *run, CPUState *cpu){
 
 void handle_hypercall_kafl_kasan(struct kvm_run *run, CPUState *cpu){
 	if(hypercall_enabled){
-#ifdef PANIC_DEBUG
-		if(cpu, run->hypercall.args[0]){
-			QEMU_PT_PRINTF(CORE_PREFIX, "ASan notification in user mode!");
+		if(run->hypercall.args[0]){
+			QEMU_PT_DEBUG(CORE_PREFIX, "ASan notification in user mode!");
 		} else{
-			QEMU_PT_PRINTF(CORE_PREFIX, "ASan notification in kernel mode!");
+			QEMU_PT_DEBUG(CORE_PREFIX, "ASan notification in kernel mode!");
 		}
-#endif
     QEMU_PT_PRINTF(CORE_PREFIX, "KASAN detected during initialization of stage 1 or stage 2 loader");
     hypercall_snd_char(KAFL_PROTO_KASAN);
 	}
@@ -380,7 +386,7 @@ void handle_hypercall_kafl_lock(struct kvm_run *run, CPUState *cpu){
             error_reportf_err(err, "Error: ");
 
 		qemu_mutex_unlock_iothread();
-		QEMU_PT_PRINTF(CORE_PREFIX, "Done...");
+		QEMU_PT_PRINTF(CORE_PREFIX, "Done. Shutting down..");
 		qemu_system_shutdown_request(SHUTDOWN_CAUSE_HOST_SIGNAL);
 	}
 }
@@ -397,7 +403,7 @@ void handle_hypercall_kafl_info(struct kvm_run *run, CPUState *cpu){
 }
 
 void enable_hprintf(void){
-	QEMU_PT_PRINTF(CORE_PREFIX, "Enable hprintf support");
+	QEMU_PT_DEBUG(CORE_PREFIX, "Enable hprintf support");
 	hprintf_enabled = true;
 }
 
@@ -481,7 +487,7 @@ void handle_hypercall_kafl_user_submit_mode(struct kvm_run *run, CPUState *cpu){
 			cpu->disassembler_word_width = 16;
 			break;
 		default:
-			QEMU_PT_PRINTF(CORE_PREFIX, "target runs in unkown mode...");
+			QEMU_PT_ERROR(CORE_PREFIX, "Error: target uses unknown word width..");
 			cpu->disassembler_word_width = -1;
 			break;
 	}
