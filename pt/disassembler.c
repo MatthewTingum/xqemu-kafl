@@ -242,6 +242,7 @@ static inline uint64_t hex_to_bin(char* str){
 	return fast_strtoull(str);
 }
 
+#ifdef CONFIG_REDQUEEN
 static bool is_interessting_lea_at(disassembler_t* self, uint64_t addr){
   asm_operand_t op1 = {0};
   asm_operand_t op2 = {0};
@@ -264,6 +265,7 @@ static bool is_interessting_lea_at(disassembler_t* self, uint64_t addr){
   }
   return res;
 }
+#endif
 
 static bool is_interessting_add_at(disassembler_t* self, uint64_t addr){
   asm_operand_t op1 = {0};
@@ -576,7 +578,9 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
  __attribute__((hot)) bool trace_disassembler(disassembler_t* self, uint64_t entry_point, uint64_t limit, tnt_cache_t* tnt_cache_state){
 
 	cofi_list *obj, *last_obj;
+#ifdef CONFIG_REDQUEEN
 	bool redqueen_tracing = (self->redqueen_mode && self->redqueen_state->trace_mode);
+#endif
 	//int last_type = -1;
 		
 	inform_disassembler_target_ip(self, entry_point);
@@ -683,20 +687,22 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 
 			case COFI_TYPE_INDIRECT_BRANCH:
 				self->handler(obj->cofi.ins_addr); //BROKEN, TODO move to inform_disassembler_target_ip
-				
+#ifdef CONFIG_REDQUEEN				
 				if(redqueen_tracing){
 					self->has_pending_indirect_branch = true;
 					self->pending_indirect_branch_src = obj->cofi.ins_addr;
 				}
-				
+#endif				
 				WRITE_SAMPLE_DECODED_DETAILED("(2)\t%lx\n",obj->cofi.ins_addr);
 				return false;
 
 			case COFI_TYPE_NEAR_RET:
+#ifdef CONFIG_REDQUEEN
 				if(redqueen_tracing){
 					self->has_pending_indirect_branch = true;
 					self->pending_indirect_branch_src = obj->cofi.ins_addr;
 				}
+#endif
 				WRITE_SAMPLE_DECODED_DETAILED("(3)\t%lx\n",obj->cofi.ins_addr);
 				return false;
 

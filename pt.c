@@ -224,6 +224,7 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 	}
 
 	FILE* rq_file = fopen(redqueen_workdir.target_code_dump, "wb");
+#ifdef CONFIG_REDQUEEN
 	if (!rq_file) {
 		QEMU_PT_ERROR(CORE_PREFIX, "Error writing RQ file %s)", redqueen_workdir.target_code_dump);
 	} else {
@@ -231,6 +232,7 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 		fwrite(buf, sizeof(uint8_t), ip_b-ip_a, rq_file);
 		fclose(rq_file);
 	}
+#endif
 #endif
 
 
@@ -300,8 +302,11 @@ void pt_kvm_init(CPUState *cpu){
 		cpu->pt_ip_filter_a[i] = 0x0;
 		cpu->pt_ip_filter_b[i] = 0x0;
 		cpu->pt_decoder_state[i] = NULL;
+#ifdef CONFIG_REDQUEEN
 		cpu->redqueen_state[i]=NULL;
+#endif
 	}
+#ifdef CONFIG_REDQUEEN
 	cpu->redqueen_patch_state = patcher_new(cpu);
 	cpu->redqueen_enable_pending = false;
 	cpu->redqueen_disable_pending = false;
@@ -310,6 +315,7 @@ void pt_kvm_init(CPUState *cpu){
 
 	cpu->patches_enable_pending = false;//TODO don't enable this
 	cpu->patches_disable_pending = false;
+#endif
 	// setting the target's word with is critical to RQ operation
 	// Initialize as invalid, set by submit_CR3 or submit_mode hypercalls
 	cpu->disassembler_word_width = 0;

@@ -277,10 +277,11 @@ static void pci_kafl_guest_realize(DeviceState *dev, Error **errp){
 		kafl_guest_create_memory_bar(s, 1, PROGRAM_SIZE, s->data_bar_fd_0, errp);
 	if (s->data_bar_fd_1 != NULL)
 		kafl_guest_create_memory_bar(s, 2, PAYLOAD_SIZE, s->data_bar_fd_1, errp);
+#ifdef CONFIG_REDQUEEN
 	if (s->redqueen_workdir){
 		setup_redqueen_workdir(s->redqueen_workdir);
 	}
-	
+#endif	
 	if(&s->chr)
 		qemu_chr_fe_set_handlers(&s->chr, kafl_guest_can_receive, kafl_guest_receive, kafl_guest_event, NULL, s, NULL, true);
 	if(s->bitmap_file)
