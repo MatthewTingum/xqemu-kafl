@@ -493,16 +493,16 @@ void handle_hypercall_kafl_user_submit_mode(struct kvm_run *run, CPUState *cpu){
 #ifdef CONFIG_REDQUEEN
 bool handle_hypercall_kafl_hook(struct kvm_run *run, CPUState *cpu){
 	X86CPU *cpux86 = X86_CPU(cpu);
-    CPUX86State *env = &cpux86->env;
+	CPUX86State *env = &cpux86->env;
 
 	for(uint8_t i = 0; i < INTEL_PT_MAX_RANGES; i++){
-		if (cpu->redqueen_state[i] && (env->eip >= cpu->pt_ip_filter_a[i]) && (env->eip <= cpu->pt_ip_filter_b[i])){
-			handle_hook(cpu->redqueen_state[i]);
-			return true;
-		}else if (cpu->singlestep_enabled && ((redqueen_t*)cpu->redqueen_state[i])->singlestep_enabled){
-			handle_hook(cpu->redqueen_state[i]);
-			return true;
-    }
+		if (cpu->redqueen_state[i]){
+			if (((env->eip >= cpu->pt_ip_filter_a[i]) && (env->eip <= cpu->pt_ip_filter_b[i])) ||
+				(cpu->singlestep_enabled && ((redqueen_t*)cpu->redqueen_state[i])->singlestep_enabled)){
+				handle_hook(cpu->redqueen_state[i]);
+				return true;
+			}
+		}
 	}
 	return false;
 }
