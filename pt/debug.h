@@ -28,7 +28,7 @@
 #define ENDC	"\033[0m"
 
 /* _PRINTF is the standard logging enabled with -D */
-/* _DEBUG is activated with -t kafl cmdline */
+/* _DEBUG is activated with -d kafl cmdline */
 /* _ERROR is printed to stdout (or logged if logging is enabled) */
 #define QEMU_PT_PRINTF(PREFIX, format, ...) qemu_log(QEMU_PT_PREFIX PREFIX format "\n", ##__VA_ARGS__)
 #define QEMU_PT_DEBUG(PREFIX, format, ...)  qemu_log_mask(LOG_KAFL, QEMU_PT_PREFIX PREFIX format "\n", ##__VA_ARGS__)
