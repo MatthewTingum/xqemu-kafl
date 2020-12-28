@@ -85,6 +85,7 @@ set -x # Print commands from now on
     --enable-vnc \
     --enable-pt \
     --enable-redqueen \
+    --disable-debug-info \
     --enable-trace-backends="nop" \
     --enable-sdl \
     --disable-curl \
