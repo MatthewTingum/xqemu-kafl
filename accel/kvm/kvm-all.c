@@ -2113,6 +2113,7 @@ int kvm_cpu_exec(CPUState *cpu)
             ret = 0;
             break;
         case KVM_EXIT_KAFL_LOCK:
+            fprintf(stderr, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
             handle_hypercall_kafl_lock(run, cpu);
             ret = 0;
             break;

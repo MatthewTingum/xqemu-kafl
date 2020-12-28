@@ -1923,7 +1923,7 @@ ETEXI
         .flags      = "p",
     },
 
-#if defined(CONFIG_PROCESSOR_TRACE) && defined(TARGET_X86_64)
+#if defined(CONFIG_PROCESSOR_TRACE)
     {
         .name       = "pt",
         .args_type  = "item:s?",

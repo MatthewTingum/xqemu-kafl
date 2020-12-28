@@ -374,6 +374,7 @@ void handle_hypercall_kafl_kasan(struct kvm_run *run, CPUState *cpu){
 }
 
 void handle_hypercall_kafl_lock(struct kvm_run *run, CPUState *cpu){
+        QEMU_PT_PRINTF(CORE_PREFIX, "Hypercall (kAFL lock)");
 	if(create_snapshot_enabled){
 		Error *err = NULL;
 		QEMU_PT_PRINTF(CORE_PREFIX, "Creating snapshot <kafl> ...");
