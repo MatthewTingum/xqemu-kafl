@@ -39,9 +39,8 @@ void setup_redqueen_workdir(char* workdir){
    assert(asprintf(&redqueen_workdir.target_code_dump,"%s/target_code_dump.img", workdir)>0);
 }
 
-redqueen_t* new_rq_state(uint8_t *code, uint64_t start_range, uint64_t end_range, CPUState *cpu){
+redqueen_t* new_rq_state(uint64_t start_range, uint64_t end_range, CPUState *cpu){
 	redqueen_t* res = malloc(sizeof(redqueen_t));
-	res->code = code;
 	res->address_range_start = start_range;
 	res->address_range_end = end_range;
 	res->cpu = cpu;
@@ -384,15 +383,16 @@ bool redqueen_get_operands_at(redqueen_t* self, uint64_t addr, asm_operand_t *op
   asm_decoder_clear(op2);
 	csh handle;
 	cs_insn *insn;
-	uint8_t* code = (self->code+(addr-self->address_range_start));
+	size_t code_size = 15;
+	uint8_t code[15], *pcode = code;
+	if (!read_virtual_memory(addr, code, code_size, self->cpu))
+		return false;
 	uint64_t cs_address = addr;
 
-	size_t code_size = self->address_range_end - addr;
-	//assert(self->disassembler_word_width == 32 || self->disassembler_word_width == 64);
-	if (cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu->disassembler_word_width), &handle) == CS_ERR_OK){
+	if (cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu), &handle) == CS_ERR_OK){
 		cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
 		insn = cs_malloc(handle);
-		assert(cs_disasm_iter(handle, (const uint8_t **) &code, &code_size, &cs_address, insn)==1);
+		assert(cs_disasm_iter(handle, (const uint8_t **) &pcode, &code_size, &cs_address, insn)==1);
 
     parse_op_str2(insn->op_str, op1, op2);
 
@@ -634,10 +634,12 @@ static void handle_hook_breakpoint(redqueen_t* self){
     csh handle;
     cs_insn *insn;
     uint64_t ip = env->eip;
-    uint8_t* code = (self->code+(ip-self->address_range_start));
+    size_t code_size = 15;
+    uint8_t code[15];
+    if (!read_virtual_memory(ip, code, code_size, self->cpu))
+        return;
     //uint64_t cs_address = ip;
-	  size_t code_size = self->address_range_end - ip;
-    if (cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu->disassembler_word_width), &handle) == CS_ERR_OK){
+    if (cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu), &handle) == CS_ERR_OK){
       cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
       size_t count = cs_disasm(handle, code, code_size, ip, 1, &insn);
       QEMU_PT_DEBUG(REDQUEEN_PREFIX, " === HANDLE REDQUEEN HOOK %s %s ===", insn->mnemonic, insn->op_str);
@@ -664,7 +666,7 @@ static void debug_print_disasm(char* desc, uint64_t ip, CPUState* cpu_state){
   csh handle;
   cs_insn *insn;
   read_virtual_memory(ip, &code[0], 64, cpu_state);
-  if (cs_open(CS_ARCH_X86, get_capstone_mode(cpu_state->disassembler_word_width), &handle) == CS_ERR_OK){
+  if (cs_open(CS_ARCH_X86, get_capstone_mode(cpu_state), &handle) == CS_ERR_OK){
     cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
     size_t count = cs_disasm(handle, &code[0], 64, ip, 1, &insn);
     if(count > 0){

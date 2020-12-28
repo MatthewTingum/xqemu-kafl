@@ -64,7 +64,7 @@ typedef struct cofi_list {
 } cofi_list;
 
 typedef struct disassembler_s{
-	uint8_t* code;
+	CPUState *cpu;
 	uint64_t min_addr;
 	uint64_t max_addr;
 	void (*handler)(uint64_t);
@@ -73,7 +73,6 @@ typedef struct disassembler_s{
 	cofi_list* list_element;
 	bool debug;
 	bool has_pending_indirect_branch;
-  int word_width;
 	uint64_t pending_indirect_branch_src;
 #ifdef CONFIG_REDQUEEN
 	bool redqueen_mode;
@@ -82,12 +81,12 @@ typedef struct disassembler_s{
 } disassembler_t;
 
 #ifdef CONFIG_REDQUEEN
-disassembler_t* init_disassembler(uint8_t* code, uint64_t min_addr, uint64_t max_addr, int disassembler_word_width, void (*handler)(uint64_t), redqueen_t *redqueen_state);
+disassembler_t* init_disassembler(CPUState *cpu, uint64_t min_addr, uint64_t max_addr, void (*handler)(uint64_t), redqueen_t *redqueen_state);
 #else
-disassembler_t* init_disassembler(uint8_t* code, uint64_t min_addr, uint64_t max_addr, int disassembler_word_width, void (*handler)(uint64_t));
+disassembler_t* init_disassembler(CPUState *cpu, uint64_t min_addr, uint64_t max_addr, void (*handler)(uint64_t));
 #endif
 
-int get_capstone_mode(int word_width_in_bits);
+int get_capstone_mode(CPUState *cpu);
 void disassembler_flush(disassembler_t* self);
 void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip);
  __attribute__((hot)) bool trace_disassembler(disassembler_t* self, uint64_t entry_point, uint64_t limit, tnt_cache_t* tnt_cache_state);

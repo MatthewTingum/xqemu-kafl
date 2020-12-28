@@ -386,6 +386,10 @@ void handle_hypercall_kafl_lock(struct kvm_run *run, CPUState *cpu){
 		qemu_mutex_unlock_iothread();
 		QEMU_PT_PRINTF(CORE_PREFIX, "Done. Shutting down..");
 		qemu_system_shutdown_request(SHUTDOWN_CAUSE_HOST_SIGNAL);
+	/*
+	printf("kAFL: VM PAUSED - CREATE SNAPSHOT NOW!\n");
+	vm_stop(RUN_STATE_PAUSED);
+	*/
 	}
 }
 

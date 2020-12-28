@@ -188,7 +188,6 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t ip_b, bool hmp_mode){
 #endif
 	int r = 0;
-	uint8_t* buf;
 
 	if(addrn > 3){
 		return -1;
@@ -206,7 +205,8 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 	if(cpu->pt_ip_filter_enabled[addrn]){
 		pt_disable_ip_filtering(cpu, addrn, hmp_mode);
 	}
-
+#ifdef CREATE_VM_IMAGE
+	uint8_t* buf;
 	buf = malloc(ip_b-ip_a); // TODO: TODO memory leak?
 	if(!read_virtual_memory(ip_a, buf, ip_b-ip_a, cpu)){
 		QEMU_PT_ERROR(PT_PREFIX, "Error (cannot dump trace region) 0x%lx-0x%lx (size: %lx)", ip_a, ip_b, (ip_b-ip_a));
@@ -214,7 +214,6 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 		return -EINVAL;
 	}
 
-#ifdef CREATE_VM_IMAGE
 	FILE* pt_file = fopen(DECODER_MEMORY_IMAGE, "wb");
 	if (!pt_file) {
 		QEMU_PT_ERROR(CORE_PREFIX, "Error writing file %s)", DECODER_MEMORY_IMAGE);
@@ -250,11 +249,11 @@ int pt_enable_ip_filtering(CPUState *cpu, uint8_t addrn, uint64_t ip_a, uint64_t
 			cpu->pt_ip_filter_enabled[addrn] = true;
 #ifdef CONFIG_REDQUEEN	
 			if(redqueen && !cpu->redqueen_state[addrn]){
-				cpu->redqueen_state[addrn] = new_rq_state(buf, ip_a, ip_b, cpu);
+				cpu->redqueen_state[addrn] = new_rq_state(ip_a, ip_b, cpu);
 			}
-			cpu->pt_decoder_state[addrn] = pt_decoder_init(buf, ip_a, ip_b, cpu->disassembler_word_width, &pt_bitmap, cpu->redqueen_state[addrn]);
-#else		
-			cpu->pt_decoder_state[addrn] = pt_decoder_init(buf, ip_a, ip_b, cpu->disassembler_word_width, &pt_bitmap);
+			cpu->pt_decoder_state[addrn] = pt_decoder_init(cpu, ip_a, ip_b, &pt_bitmap, cpu->redqueen_state[addrn]);
+#else
+			cpu->pt_decoder_state[addrn] = pt_decoder_init(cpu, ip_a, ip_b, &pt_bitmap);
 #endif
 			break;
 		default:

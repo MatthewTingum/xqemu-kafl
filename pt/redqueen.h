@@ -60,7 +60,6 @@ enum operand_types{VALUE64, VALUE32, VALUE16, VALUE8, VALUE8H, VALUE8L};
 #define CMP_BITMAP_SHOULD_HOOK_RQ (CMP_BITMAP_RQ_INSTRUCTION)
 
 typedef struct redqueen_s{
-	uint8_t* code;
 	uint64_t bitmap_size;
 	uint8_t* bitmap;
 	uint32_t* counter_bitmap;
@@ -90,7 +89,7 @@ extern redqueen_workdir_t redqueen_workdir;
 
 void setup_redqueen_workdir(char* workdir);
 
-redqueen_t* new_rq_state(uint8_t *code, uint64_t start_range, uint64_t end_range, CPUState *cpu);
+redqueen_t* new_rq_state(uint64_t start_range, uint64_t end_range, CPUState *cpu);
 void destroy_rq_state(redqueen_t* self);
 
 void set_rq_instruction(redqueen_t* self, uint64_t addr);

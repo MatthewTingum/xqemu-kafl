@@ -150,16 +150,11 @@ static void flush_log(decoder_t* self){
 #endif
 
 #ifdef CONFIG_REDQUEEN
-decoder_t* pt_decoder_init(uint8_t* code, uint64_t min_addr, uint64_t max_addr, int disassembler_word_width, void (*handler)(uint64_t), redqueen_t *redqueen_state){
+decoder_t* pt_decoder_init(CPUState *cpu, uint64_t min_addr, uint64_t max_addr, void (*pt_bitmap)(uint64_t), redqueen_t *redqueen_state){
 #else
-decoder_t* pt_decoder_init(uint8_t* code, uint64_t min_addr, uint64_t max_addr, int disassembler_word_width, void (*handler)(uint64_t)){
+decoder_t* pt_decoder_init(CPUState *cpu, uint64_t min_addr, uint64_t max_addr, void (*pt_bitmap)(uint64_t)){
 #endif
 	decoder_t* res = malloc(sizeof(decoder_t));
-	res->code = code;
-	res->min_addr = min_addr;
-	res->max_addr = max_addr;
-	res->handler = handler;
-
 	res->last_tip = 0;
 	res->last_tip_tmp = 0;
 	res->fup_bind_pending = false;
@@ -167,9 +162,9 @@ decoder_t* pt_decoder_init(uint8_t* code, uint64_t min_addr, uint64_t max_addr, 
 	flush_log(res);
 #endif
 #ifdef CONFIG_REDQUEEN
-	res->disassembler_state = init_disassembler(code, min_addr, max_addr, disassembler_word_width, handler, redqueen_state);	
+res->disassembler_state = init_disassembler(cpu, min_addr, max_addr, pt_bitmap, redqueen_state);
 #else
-	res->disassembler_state = init_disassembler(code, min_addr, max_addr, disassembler_word_width, handler);
+res->disassembler_state = init_disassembler(cpu, min_addr, max_addr, pt_bitmap);
 #endif
 	res->tnt_cache_state = tnt_cache_init();
 		/* ToDo: Free! */
@@ -189,6 +184,7 @@ void pt_decoder_destroy(decoder_t* self){
 		self->tnt_cache_state = NULL;
 	}
 	free(self->decoder_state);
+	free(self->decoder_state_result);
 	free(self);
 }
 
@@ -705,11 +701,7 @@ static inline void pip_handler(decoder_t* self, uint8_t** p){
 		}
 	}
 #ifdef DEBUG
-	if(count_tnt(self->tnt_cache_state))
-		WRITE_SAMPLE_DECODED_DETAILED("\tTNT %d (PGE: %d)\n", count_tnt(self->tnt_cache_state), self->pge_enabled);
-	else{
-		WRITE_SAMPLE_DECODED_DETAILED("\tTNT %d (PGE: %d)\n", count_tnt(self->tnt_cache_state), self->pge_enabled);
-	}
+	WRITE_SAMPLE_DECODED_DETAILED("\tTNT %d (PGE %d)\n", count_tnt(self->tnt_cache_state), self->last_tip);
 #endif
 	return true;
 }

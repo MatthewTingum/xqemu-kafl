@@ -154,7 +154,7 @@ static void _patcher_save_patch(patcher_t *self, size_t index, uint8_t* data, si
 static size_t _patcher_disassemble_size(patcher_t *self, uint8_t* data, uint64_t addr, x86_insn type){
 
     csh handle;
-    if (cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu->disassembler_word_width), &handle) == CS_ERR_OK){
+    if (cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu), &handle) == CS_ERR_OK){
       cs_insn *insn = cs_malloc(handle);
       uint8_t* cur_offset = data;
       uint64_t cs_address = addr;

@@ -10,7 +10,7 @@
 #ifndef LOGGER_H
 #define LOGGER_H
 
-	#define CREATE_VM_IMAGE
+	//#define CREATE_VM_IMAGE
 	//#define SAMPLE_RAW
 	//#define SAMPLE_DECODED
 	//#define SAMPLE_DECODED_DETAILED

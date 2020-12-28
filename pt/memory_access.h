@@ -16,6 +16,9 @@
 #include "qemu-common.h"
 #include "sysemu/kvm_int.h"
 
+#define x86_64_PAGE_SIZE	0x1000
+#define x86_64_PAGE_MASK	~(x86_64_PAGE_SIZE - 1)
+
 bool read_virtual_memory(uint64_t address, uint8_t* data, uint32_t size, CPUState *cpu);
 bool write_virtual_memory(uint64_t address, uint8_t* data, uint32_t size, CPUState *cpu);
 void hexdump_virtual_memory(uint64_t address, uint32_t size, CPUState *cpu);

@@ -11,16 +11,13 @@
 #include "hypercall.h"
 #include "debug.h"
 
-#define x86_64_PAGE_SIZE    	0x1000
-#define x86_64_PAGE_MASK   		~(x86_64_PAGE_SIZE - 1)
-
 bool read_virtual_memory(uint64_t address, uint8_t* data, uint32_t size, CPUState *cpu){
 	uint8_t tmp_buf[x86_64_PAGE_SIZE];
 	MemTxAttrs attrs;
 	hwaddr phys_addr;
 	int asidx;
-	
-  uint64_t amount_copied = 0;
+	bool ret = true;
+	uint64_t amount_copied = 0;
 	
 	//cpu_synchronize_state(cpu);
 	kvm_cpu_synchronize_state(cpu);
@@ -42,10 +39,11 @@ bool read_virtual_memory(uint64_t address, uint8_t* data, uint32_t size, CPUStat
         len_skipped = size-amount_copied;
       }
 
-      QEMU_PT_PRINTF(MEM_PREFIX, "Warning, read from unmapped memory:\t%lx, skipping to %lx", address, next_page);
-		  memset( data+amount_copied, ' ',  len_skipped);
+      QEMU_PT_PRINTF(MEM_PREFIX, "Warning, read from unmapped memory: %lx, skipping to %lx", address, next_page);
+	  memset( data+amount_copied, 0x90,  len_skipped); // fill with NOPs
       address += len_skipped;
       amount_copied += len_skipped;
+      ret = false;
       continue;
     }
 		
@@ -65,7 +63,7 @@ bool read_virtual_memory(uint64_t address, uint8_t* data, uint32_t size, CPUStat
 		amount_copied += len_to_copy;
 	}
 	
-	return true;
+	return ret;
 }
 
 bool is_addr_mapped(uint64_t address, CPUState *cpu){

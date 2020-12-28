@@ -11,6 +11,7 @@
 #include "debug.h"
 #include "pt/disassembler.h"
 #include "qemu/log.h"
+#include "pt/memory_access.h"
 #ifdef CONFIG_REDQUEEN
 #include "pt/redqueen.h"
 #endif
@@ -21,7 +22,7 @@
 #define MODRM_REG(x)		(x << 3)
 #define MODRM_AND			0b00111000
 
-#define limit_check(a, b, c) (!((c >= a) & (c <= b)))
+#define limit_check(prev, next, limit) (!((limit >= prev) & (limit <= next)))
 #define out_of_bounds(self, addr) ((addr < self->min_addr) | (addr > self->max_addr))
 
 #define FAST_ARRAY_LOOKUP
@@ -187,31 +188,16 @@ static void map_put(disassembler_t* self, uint64_t addr, uint64_t ref){
 	lookup_area[self->max_addr-addr] = ref;
 }
 
-static int map_exist(disassembler_t* self, uint64_t addr){
-	return !!(lookup_area[self->max_addr-addr]);
-}
-
 static int map_get(disassembler_t* self, uint64_t addr, uint64_t* ref){
 	*ref = lookup_area[self->max_addr-addr];
 	return !(*ref);
 }
-
 #else
-
 static void map_put(disassembler_t* self, uint64_t addr, uint64_t ref){
 	int ret;
 	khiter_t k;
 	k = kh_put(ADDR0, self->map, addr, &ret); 
 	kh_value(self->map, k) = ref;
-}
-
-static int map_exist(disassembler_t* self, uint64_t addr){
-	khiter_t k;
-	k = kh_get(ADDR0, self->map, addr); 
-	if(k != kh_end(self->map)){
-		return 1;
-	}
-	return 0;
 }
 
 static int map_get(disassembler_t* self, uint64_t addr, uint64_t* ref){
@@ -383,8 +369,8 @@ static cofi_type opcode_analyzer(disassembler_t* self, cs_insn *ins){
 	return NO_COFI_TYPE;
 }
 
-int get_capstone_mode(int word_width_in_bits){
-	switch(word_width_in_bits){
+int get_capstone_mode(CPUState *cpu){
+	switch(cpu->disassembler_word_width){
 		case 64: 
 			return CS_MODE_64;
 		case 32: 
@@ -401,66 +387,61 @@ static cofi_list* analyse_assembly(disassembler_t* self, uint64_t base_address){
   //cofi_header* tmp = NULL;
 	uint64_t tmp_list_element = 0;
 	bool last_nop = false;
-	uint64_t total = 0;
 	uint64_t cofi = 0;
-	const uint8_t* code = self->code + (base_address-self->min_addr);
-	size_t code_size = (self->max_addr-base_address);
+	uint8_t* code = NULL;
+	uint8_t tmp_code[x86_64_PAGE_SIZE*2];
+	size_t code_size = 0;
 	uint64_t address = base_address;
 	cofi_list* predecessor = NULL;
 	cofi_list* first = NULL;
-  	bool abort_disassembly = false;
-				
-	if (cs_open(CS_ARCH_X86, get_capstone_mode(self->word_width), &handle) != CS_ERR_OK)
+  	//bool abort_disassembly = false;
+
+	code_size = x86_64_PAGE_SIZE - (address & ~x86_64_PAGE_MASK);
+	if (!read_virtual_memory(address, tmp_code, code_size, self->cpu))
 		return NULL;
-	
+	if (code_size < 15) {
+		// instruction may continue onto next page, try reading it..
+		if (read_virtual_memory(address, tmp_code, code_size + x86_64_PAGE_SIZE, self->cpu))
+			code_size += x86_64_PAGE_SIZE;
+	}
+	code = tmp_code;
+
+	assert(cs_open(CS_ARCH_X86, get_capstone_mode(self->cpu), &handle) == CS_ERR_OK);
 	cs_option(handle, CS_OPT_DETAIL, CS_OPT_ON);
+	// parse unrecognized instructions as data (endbr32/endbr64)
+	cs_option(handle, CS_OPT_SKIPDATA, CS_OPT_ON);
 	insn = cs_malloc(handle);
-	
-	while(cs_disasm_iter(handle, &code, &code_size, &address, insn)) {	
+
+	QEMU_PT_DEBUG(DISASM_PREFIX, "Analyse ASM: %lx (%zd), max_addr=%lx", address, code_size, self->max_addr);
+
+	while(cs_disasm_iter(handle, (const uint8_t**)&code, &code_size, &address, insn)) {	
+
+		QEMU_PT_DEBUG(DISASM_PREFIX, "Loop: %lx:\t%s\t%s, last_nop=%d", insn->address, insn->mnemonic, insn->op_str, last_nop);
+
 		if (insn->address > self->max_addr){
 			break;
 		}
 			
 		type = opcode_analyzer(self, insn);
-		total++;
-		
-		//if (self->debug){
-		//	printf("%lx:\t(%d)\t%s\t%s\t\t\n", insn->address, type, insn->mnemonic, insn->op_str);
-		//}
 		
 		if (!last_nop){
-			
-	
-			edit_cofi_ptr(predecessor, self->list_element);
-			predecessor = self->list_element;
-			self->list_element = new_list_element(self->list_element);
+			if (cofi)
+				predecessor = self->list_element;
 
-			//tmp = malloc(sizeof(cofi_header));
+			self->list_element = new_list_element(self->list_element);
 			self->list_element->cofi.type = NO_COFI_TYPE;
 			self->list_element->cofi.ins_addr = insn->address;
-      		self->list_element->cofi.ins_size = insn->size;
+			self->list_element->cofi.ins_size = insn->size;
 			self->list_element->cofi.target_addr = 0;
+			edit_cofi_ptr(predecessor, self->list_element);
 		}
-		
-		if (map_exist(self, insn->address)){
-			//if(tmp){
-				map_get(self, insn->address, &tmp_list_element);
-				edit_cofi_ptr(self->list_element, (cofi_list*)tmp_list_element);
-
-				
-		
-				edit_cofi_ptr(predecessor, self->list_element);
-				predecessor = self->list_element;
-				self->list_element = new_list_element(self->list_element);
-
-				//tmp = malloc(sizeof(cofi_header));
-				self->list_element->cofi.type = NO_COFI_TYPE;
-				self->list_element->cofi.ins_addr = insn->address;
-				self->list_element->cofi.target_addr = insn->size;
-				self->list_element->cofi.target_addr = 0;
-			//}
-
-			break;
+		if (!map_get(self, insn->address, (uint64_t *)&tmp_list_element)){
+			if(((cofi_list *)tmp_list_element)->cofi_ptr){
+				edit_cofi_ptr(self->list_element, (cofi_list *)tmp_list_element);
+				break;
+			} else {
+				self->list_element = (cofi_list *)tmp_list_element;
+			}
 		}
 		
 		if (type != NO_COFI_TYPE){
@@ -476,12 +457,13 @@ static cofi_list* analyse_assembly(disassembler_t* self, uint64_t base_address){
 			}
 			//self->list_element->cofi = tmp;
 			map_put(self, self->list_element->cofi.ins_addr, (uint64_t)(self->list_element));
-			if(type == COFI_TYPE_INDIRECT_BRANCH || type == COFI_TYPE_NEAR_RET || type == COFI_TYPE_FAR_TRANSFERS){
+			//if(type == COFI_TYPE_INDIRECT_BRANCH || type == COFI_TYPE_NEAR_RET || type == COFI_TYPE_FAR_TRANSFERS){
 				//don't disassembly through ret and similar instructions to avoid disassembly inline data
 				//however we need to finish the cofi ptr datatstructure therefore we take a second loop iteration and abort
 				//after last_nop = false ist handeled
-				abort_disassembly = true;
-			}
+				//abort_disassembly = true;
+				//QEMU_PT_DEBUG(DISASM_PREFIX, "ABORT_ASSEMBLY=TRUE");
+			//}
 		} else {
 			last_nop = true;
 			map_put(self, insn->address, (uint64_t)(self->list_element));
@@ -491,9 +473,9 @@ static cofi_list* analyse_assembly(disassembler_t* self, uint64_t base_address){
 			first = self->list_element;
 		}
 
-		if (abort_disassembly){
-			break;
-		}
+		//if (abort_disassembly){
+		//	break;
+		//}
 	}
 	
 	cs_free(insn, 1);
@@ -501,27 +483,26 @@ static cofi_list* analyse_assembly(disassembler_t* self, uint64_t base_address){
 	return first;
 }
 #ifdef CONFIG_REDQUEEN
-disassembler_t* init_disassembler(uint8_t* code, uint64_t min_addr, uint64_t max_addr, int disassembler_word_width, void (*handler)(uint64_t), redqueen_t *redqueen_state){
+disassembler_t* init_disassembler(CPUState *cpu, uint64_t min_addr, uint64_t max_addr, void (*pt_bitmap)(uint64_t), redqueen_t *redqueen_state){
 #else
-disassembler_t* init_disassembler(uint8_t* code, uint64_t min_addr, uint64_t max_addr, int disassembler_word_width, void (*handler)(uint64_t)){
+disassembler_t* init_disassembler(CPUState *cpu, uint64_t min_addr, uint64_t max_addr, void (*pt_bitmap)(uint64_t)){
 #endif
 	disassembler_t* res = malloc(sizeof(disassembler_t));
-	res->code = code;
+	res->cpu = cpu;
 	res->min_addr = min_addr;
 	res->max_addr = max_addr;
-	res->handler = handler;
-	res->debug = false;
-	res->map = kh_init(ADDR0);
+	res->handler = pt_bitmap;
 	res->list_head = create_list_head();
-	res->word_width = disassembler_word_width;
 	res->list_element = res->list_head;
-  	res->has_pending_indirect_branch = false;
-  	res->pending_indirect_branch_src = 0;
+	res->has_pending_indirect_branch = false;
+	res->pending_indirect_branch_src = 0;
 
 #ifdef FAST_ARRAY_LOOKUP
-  	assert((max_addr-min_addr) <= (128 << 20)); /* up to 128MB trace region (results in 512MB lookup table...) */
-  	lookup_area = malloc(sizeof(uint64_t) * (max_addr-min_addr));
-  	memset(lookup_area, 0x00, (sizeof(uint64_t) * (max_addr-min_addr)));
+	assert((max_addr-min_addr) <= (128 << 20)); /* up to 128MB trace region (results in 512MB lookup table...) */
+	lookup_area = malloc(sizeof(uint64_t) * (max_addr-min_addr));
+	memset(lookup_area, 0x00, (sizeof(uint64_t) * (max_addr-min_addr)));
+#else
+	res->map = kh_init(ADDR0);
 #endif
 
 #ifdef CONFIG_REDQUEEN
@@ -537,25 +518,32 @@ disassembler_t* init_disassembler(uint8_t* code, uint64_t min_addr, uint64_t max
 }
 
 void destroy_disassembler(disassembler_t* self){
+#ifdef FAST_ARRAY_LOOKUP
+	free(lookup_area);
+#else
 	kh_destroy(ADDR0, self->map);
+#endif
 	free_list(self->list_head);
 	free(self);
 }
 
-static inline cofi_list* get_obj(disassembler_t* self, uint64_t entry_point, tnt_cache_t* tnt_cache_state){
-	uint64_t tmp_list_element;
-	//if (!count_tnt(tnt_cache_state))
-	//	return NULL;
-
+static inline cofi_list* get_obj(disassembler_t* self, uint64_t entry_point){
+	cofi_list *tmp_obj;
 
 	if (out_of_bounds(self, entry_point)){
 		return NULL;
 	}
 
-	if(map_get(self, entry_point, &tmp_list_element)){
-		return analyse_assembly(self, entry_point);
+	if(map_get(self, entry_point, (uint64_t *)&tmp_obj)){
+		tmp_obj = analyse_assembly(self, entry_point);
 	}
-	return (cofi_list*)tmp_list_element;
+
+	// Decoding can fail on code read or decoding errors
+	// Fuzzing will usually still work but traces may not be accurate.
+	if (!tmp_obj || !tmp_obj->cofi_ptr)
+		return NULL;
+
+	return tmp_obj;
 }
 
 void disassembler_flush(disassembler_t* self){
@@ -575,30 +563,42 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
   }
 }
 
+//#define DEBUG_TRACE_RETURN
+#ifndef DEBUG_TRACE_RETURN
+#define check_return(msg) do { return true; } while (0)
+#else
+#define check_return(msg) \
+	do { \
+		if (count_tnt(tnt_cache_state)) { \
+			WRITE_SAMPLE_DECODED_DETAILED("Error %s\n", msg); \
+			printf("Trap %s: in trace_disassembler()\n", msg); \
+			asm("int $3\r\n"); \
+			return false; \
+		} \
+		return true; \
+	} while (0)
+#endif
+
  __attribute__((hot)) bool trace_disassembler(disassembler_t* self, uint64_t entry_point, uint64_t limit, tnt_cache_t* tnt_cache_state){
 
 	cofi_list *obj, *last_obj;
 #ifdef CONFIG_REDQUEEN
 	bool redqueen_tracing = (self->redqueen_mode && self->redqueen_state->trace_mode);
 #endif
-	//int last_type = -1;
 		
 	inform_disassembler_target_ip(self, entry_point);
 
-	obj = get_obj(self, entry_point, tnt_cache_state);
+	obj = get_obj(self, entry_point);
 
-	if (!obj)
-		return false;
-
-	if(!limit_check(entry_point, obj->cofi.ins_addr, limit)){
-		WRITE_SAMPLE_DECODED_DETAILED("1\n");
-		return true;
+	if (!obj || !limit_check(entry_point, obj->cofi.ins_addr, limit)){
+		check_return("1");
 	}
+
+	self->handler(entry_point);
 
 	while(true){
 		
-		if (!obj)
-			return false;
+		if (!obj) return false;
 
 		switch(obj->cofi.type){
 
@@ -617,24 +617,15 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 							redqueen_register_transition(self->redqueen_state, obj->cofi.ins_addr, obj->cofi.target_addr);
 						}
 #endif
-						/*
-						if (out_of_bounds(self, obj->cofi->ins_addr))
-							return true;
-						*/
 						last_obj = obj;
 						self->handler(obj->cofi.target_addr);
 						if(!obj->cofi_target_ptr){
-							obj->cofi_target_ptr = get_obj(self, obj->cofi.target_addr, tnt_cache_state);
+							obj->cofi_target_ptr = get_obj(self, obj->cofi.target_addr);
 						}
 						obj = obj->cofi_target_ptr;
 
-						if(!obj){
-							return false;
-						}
-
-						if(!limit_check(last_obj->cofi.target_addr, obj->cofi.ins_addr, limit)){
-							WRITE_SAMPLE_DECODED_DETAILED("2\n");
-							return true;
+						if (!obj || !limit_check(last_obj->cofi.target_addr, obj->cofi.ins_addr, limit)){
+							check_return("2");
 						}
 						break;
 					case NOT_TAKEN:
@@ -647,21 +638,16 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 #endif
 
 						last_obj = obj;
+						self->handler((obj->cofi.ins_addr)+obj->cofi.ins_size);
 						/* fix if cofi_ptr is null */
     					if(!obj->cofi_ptr){
-    						obj->cofi_ptr = get_obj(self, obj->cofi.ins_addr+obj->cofi.ins_size, tnt_cache_state);
+						obj->cofi_ptr = get_obj(self, obj->cofi.ins_addr+obj->cofi.ins_size);
     					}
 
-						self->handler((obj->cofi.ins_addr)+obj->cofi.ins_size);
 						obj = obj->cofi_ptr;
 
-						if(!obj){
-							return false;
-						}
-
-						if(!limit_check(last_obj->cofi.ins_addr, obj->cofi.ins_addr, limit)){
-							WRITE_SAMPLE_DECODED_DETAILED("3\n");
-							return true;
+						if(!obj || !limit_check(last_obj->cofi.ins_addr, obj->cofi.ins_addr, limit)){
+							check_return("3");
 						}
 						break;
 				}
@@ -671,17 +657,12 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 				WRITE_SAMPLE_DECODED_DETAILED("(%d)\t%lx\n", COFI_TYPE_UNCONDITIONAL_DIRECT_BRANCH ,obj->cofi.ins_addr);
 				last_obj = obj;
 				if(!obj->cofi_target_ptr){
-					obj->cofi_target_ptr = get_obj(self, obj->cofi.target_addr, tnt_cache_state);
+					obj->cofi_target_ptr = get_obj(self, obj->cofi.target_addr);
 				}
 				obj = obj->cofi_target_ptr;
 
-				if(!obj){
-					return false;
-				}
-
-				if(!limit_check(last_obj->cofi.target_addr, obj->cofi.ins_addr, limit)){
-					WRITE_SAMPLE_DECODED_DETAILED("4\n");
-					return true;
+				if(!obj || !limit_check(last_obj->cofi.target_addr, obj->cofi.ins_addr, limit)){
+					check_return("4");
 				}
 				break;
 
@@ -694,7 +675,7 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 				}
 #endif				
 				WRITE_SAMPLE_DECODED_DETAILED("(2)\t%lx\n",obj->cofi.ins_addr);
-				return false;
+				return true;
 
 			case COFI_TYPE_NEAR_RET:
 #ifdef CONFIG_REDQUEEN
@@ -704,7 +685,7 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 				}
 #endif
 				WRITE_SAMPLE_DECODED_DETAILED("(3)\t%lx\n",obj->cofi.ins_addr);
-				return false;
+				return true;
 
 			case COFI_TYPE_FAR_TRANSFERS:
 				WRITE_SAMPLE_DECODED_DETAILED("(4)\t%lx\n",obj->cofi.ins_addr);
@@ -712,16 +693,18 @@ void inform_disassembler_target_ip(disassembler_t* self, uint64_t target_ip){
 
 			case NO_COFI_TYPE:
 				WRITE_SAMPLE_DECODED_DETAILED("(5)\t%lx\n",obj->cofi.ins_addr);
-        		if(!(obj->cofi_ptr) || !limit_check(obj->cofi.ins_addr, obj->cofi_ptr->cofi.ins_addr, limit)){
-          			WRITE_SAMPLE_DECODED_DETAILED("4\n");
-          			return true;
-        		}
-        		obj = obj->cofi_ptr;
+
+				if(!(obj->cofi_ptr) || !limit_check(obj->cofi.ins_addr, obj->cofi.ins_addr, limit)){
+					check_return("(5)");
+				}
+				obj = obj->cofi_ptr;
 				break;
 			case NO_DISASSEMBLY:
 				assert(false);
 		}
 	}
-}
 
+	assert(false);
+	return false;
+}
 
