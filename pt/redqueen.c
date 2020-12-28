@@ -8,15 +8,18 @@
  */
 
 #include <assert.h>
+#include <inttypes.h>
+
 #include "pt/redqueen.h"
 #include "pt/memory_access.h"
 #include "pt/disassembler.h"
 #include "pt/interface.h"
-#include <inttypes.h>
 #include "file_helper.h"
 #include "patcher.h"
 #include "debug.h"
 #include "asm_decoder.h"
+
+#include "exec/user/abitypes.h"
 
 const char* regs64[] = RQ_REG64;
 const char* regs32[] = RQ_REG32;
@@ -711,19 +714,23 @@ void handle_hook(redqueen_t* self){
 }
 
 void dump_se_return_access(redqueen_t* self, cs_insn* insn){
-	int unused __attribute__((unused));
+  int unused __attribute__((unused));
   X86CPU *cpu = X86_CPU(self->cpu);
   CPUX86State *env = &cpu->env;
   char* res = NULL;
   uint8_t buf[8];
   char hex_buf[16+1];
-  uint64_t begin = env->regs[RSP];
+  abi_ulong begin = env->regs[RSP];
   read_virtual_memory(begin, (uint8_t*)&buf, 8, self->cpu);
   char* tmp_hex_buf = hex_buf;
   for(int i = 0; i < 8; i++){
     tmp_hex_buf += sprintf(tmp_hex_buf, "%02X", (uint8_t)buf[i]);
   }
-  unused = asprintf( &res, "\"access\":%"PRIu64", \"mem\":[%"PRIu64",\"%s\"]", env->eip, begin, hex_buf ) ;
+  unused = asprintf(&res,
+                    "\"access\":" TARGET_FMT_lu
+                    ", \"mem\":["TARGET_FMT_lu
+                    ",\"%s\"]",
+                    env->eip, begin, hex_buf ) ;
   write_se_result(res);
   free(res);
 }
@@ -771,36 +778,48 @@ void dump_se_memory_access(redqueen_t* self, cs_insn* insn){
 
 
 void dump_se_registers(redqueen_t* self){
-	int unused __attribute__((unused));
+  int unused __attribute__((unused));
   char* res = NULL;
   X86CPU *cpu = X86_CPU(self->cpu);
   CPUX86State *env = &cpu->env;
-  uint64_t rip = env->eip;
-  uint64_t rax = env->regs[RAX];
-  uint64_t rbx = env->regs[RBX];
-  uint64_t rcx = env->regs[RCX];
-  uint64_t rdx = env->regs[RDX];
-  uint64_t rsp = env->regs[RSP];
-  uint64_t rbp = env->regs[RBP];
-  uint64_t rsi = env->regs[RSI];
-  uint64_t rdi = env->regs[RDI]; 
-  uint64_t r8 =  env->regs[R8];
-  uint64_t r9 =  env->regs[R9];
-  uint64_t r10 = env->regs[R10];
-  uint64_t r11 = env->regs[R11];
-  uint64_t r12 = env->regs[R12];
-  uint64_t r13 = env->regs[R13];
-  uint64_t r14 = env->regs[R14];
-  uint64_t r15 = env->regs[R15];
-  uint64_t eflags = env->eflags;
-  uint64_t gs = env->segs[R_GS].base;
-  uint64_t fs = env->segs[R_FS].base;
+  abi_ulong rip = env->eip;
+  abi_ulong rax = env->regs[RAX];
+  abi_ulong rbx = env->regs[RBX];
+  abi_ulong rcx = env->regs[RCX];
+  abi_ulong rdx = env->regs[RDX];
+  abi_ulong rsp = env->regs[RSP];
+  abi_ulong rbp = env->regs[RBP];
+  abi_ulong rsi = env->regs[RSI];
+  abi_ulong rdi = env->regs[RDI];
+  abi_ulong r8 =  env->regs[R8];
+#if defined(TARGET_X86_64)
+  abi_ulong r9 =  env->regs[R9];
+  abi_ulong r10 = env->regs[R10];
+  abi_ulong r11 = env->regs[R11];
+  abi_ulong r12 = env->regs[R12];
+  abi_ulong r13 = env->regs[R13];
+  abi_ulong r14 = env->regs[R14];
+  abi_ulong r15 = env->regs[R15];
+#endif
+  abi_ulong eflags = env->eflags;
+  abi_ulong gs = env->segs[R_GS].base;
+  abi_ulong fs = env->segs[R_FS].base;
   //printf(
   //    "\"regs\":[" "%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 ",%"PRIx64 "]\n",
   //              rip,   rax,   rbx,   rcx,   rdx,    r8,    r9,   r10,   r11,   r12,   r13,   r14,   r15,   rsp,   rbp,   rsi,   rdi,eflags,    gs) ;
   unused = asprintf(&res,
-      "\"regs\":[" "%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64 ",%"PRIu64",%"PRIu64 "]",
-                rip,   rax,   rbx,   rcx,   rdx,    r8,    r9,   r10,   r11,   r12,   r13,   r14,   r15,   rsp,   rbp,   rsi,   rdi,eflags,    gs, fs) ;
+      "\"regs\":[" TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu ","
+                   TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu ","
+#if defined(TARGET_X86_64)
+                   TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu ","
+                   TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu ","
+#endif
+                   TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu "," TARGET_FMT_lu "]",
+                   rip, rax, rbx, rcx, rdx, r8,
+#if defined(TARGET_X86_64)
+                   r9, r10, r11, r12, r13, r14, r15,
+#endif
+                   rsp, rbp, rsi, rdi, eflags, gs, fs) ;
   write_se_result(res);
   free(res);
 }

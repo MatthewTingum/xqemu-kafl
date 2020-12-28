@@ -22,7 +22,7 @@ Show various information about the system state.
 @table @option
 ETEXI
 
-#if defined(CONFIG_PROCESSOR_TRACE) && defined(TARGET_X86_64)
+#if defined(CONFIG_PROCESSOR_TRACE)
 
 {
     .name       = "enable",
