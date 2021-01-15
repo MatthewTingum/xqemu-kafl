@@ -940,6 +940,10 @@ for opt do
   case "$opt" in
   --help|-h) show_help=yes
   ;;
+  --enable-pt) pt="yes"
+  ;;
+  --enable-redqueen) redqueen="yes"
+  ;;
   --version|-V) exec cat $source_path/VERSION
   ;;
   --prefix=*) prefix="$optarg"
@@ -1736,6 +1740,7 @@ disabled with --disable-FEATURE, default is enabled if available:
   debug-tcg       TCG debugging (default is disabled)
   debug-info      debugging information
   sparse          sparse checker
+  pt              enable guest tracing (vmx_pt)
 
   gnutls          GNUTLS cryptography support
   nettle          nettle cryptography support
@@ -5971,9 +5976,9 @@ if test "$gcov" = "yes" ; then
   CFLAGS="-fprofile-arcs -ftest-coverage -g $CFLAGS"
   LDFLAGS="-fprofile-arcs -ftest-coverage $LDFLAGS"
 elif test "$fortify_source" = "yes" ; then
-  CFLAGS="-O2 -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 $CFLAGS"
+  CFLAGS="-O3 -mtune=native -U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2 $CFLAGS"
 elif test "$debug" = "no"; then
-  CFLAGS="-O2 $CFLAGS"
+  CFLAGS="-O3 -mtune=native $CFLAGS"
 fi
 
 if test "$have_asan" = "yes"; then
@@ -6710,6 +6715,12 @@ if test "$accept4" = "yes" ; then
 fi
 if test "$splice" = "yes" ; then
   echo "CONFIG_SPLICE=y" >> $config_host_mak
+fi
+if test "$pt" = "yes" ; then
+  echo "CONFIG_PROCESSOR_TRACE=y" >> $config_host_mak
+  if test "$redqueen" = "yes" ; then
+    echo "CONFIG_REDQUEEN=y" >> $config_host_mak
+  fi
 fi
 if test "$eventfd" = "yes" ; then
   echo "CONFIG_EVENTFD=y" >> $config_host_mak

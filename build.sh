@@ -81,10 +81,14 @@ set -x # Print commands from now on
     ${debug_opts} \
     ${sys_opts} \
     --target-list=i386-softmmu \
+    --enable-gtk \
+    --enable-vnc \
+    --enable-pt \
+    --enable-redqueen \
+    --disable-debug-info \
     --enable-trace-backends="nop" \
     --enable-sdl \
     --disable-curl \
-    --disable-vnc \
     --disable-vnc-sasl \
     --disable-docs \
     --disable-tools \
@@ -101,7 +105,6 @@ set -x # Print commands from now on
     --disable-stack-protector \
     --disable-glusterfs \
     --disable-bluez \
-    --disable-gtk \
     --disable-curses \
     --disable-gnutls \
     --disable-nettle \

@@ -43,6 +43,12 @@
 
 #include "hw/boards.h"
 
+#ifdef CONFIG_PROCESSOR_TRACE
+#include "pt.h"
+#include "pt/hypercall.h"
+#include "pt/synchronization.h"
+#endif
+
 /* This check must be after config-host.h is included */
 #ifdef CONFIG_EVENTFD
 #include <sys/eventfd.h>
@@ -347,6 +353,10 @@ int kvm_init_vcpu(CPUState *cpu)
     cpu->kvm_fd = ret;
     cpu->kvm_state = s;
     cpu->vcpu_dirty = true;
+
+#ifdef CONFIG_PROCESSOR_TRACE
+    pt_kvm_init(cpu);
+#endif
 
     mmap_size = kvm_ioctl(s, KVM_GET_VCPU_MMAP_SIZE, 0);
     if (mmap_size < 0) {
@@ -1942,6 +1952,10 @@ static void kvm_eat_signals(CPUState *cpu)
     } while (sigismember(&chkset, SIG_IPI));
 }
 
+#ifdef CONFIG_PROCESSOR_TRACE
+extern void qemu_system_reload_request(void);
+#endif
+
 int kvm_cpu_exec(CPUState *cpu)
 {
     struct kvm_run *run = cpu->kvm_run;
@@ -1959,6 +1973,8 @@ int kvm_cpu_exec(CPUState *cpu)
 
     do {
         MemTxAttrs attrs;
+
+        synchronization_check_reload_pending(cpu);
 
         if (cpu->vcpu_dirty) {
             kvm_arch_put_registers(cpu, KVM_PUT_RUNTIME_STATE);
@@ -2055,6 +2071,110 @@ int kvm_cpu_exec(CPUState *cpu)
         case KVM_EXIT_INTERNAL_ERROR:
             ret = kvm_handle_internal_error(cpu, run);
             break;
+#ifdef CONFIG_PROCESSOR_TRACE
+        case KVM_EXIT_KAFL_ACQUIRE:
+            handle_hypercall_kafl_acquire(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_GET_PAYLOAD:
+            handle_hypercall_get_payload(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_GET_PROGRAM:
+            handle_hypercall_get_program(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_RELEASE:
+            handle_hypercall_kafl_release(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_SUBMIT_CR3:
+            handle_hypercall_kafl_cr3(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_SUBMIT_PANIC:
+            handle_hypercall_kafl_submit_panic(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_SUBMIT_KASAN:
+            handle_hypercall_kafl_submit_kasan(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_PANIC:
+            handle_hypercall_kafl_panic(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_KASAN:
+            handle_hypercall_kafl_kasan(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_TIMEOUT:
+            handle_hypercall_kafl_timeout(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_LOCK:
+            fprintf(stderr, "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n");
+            handle_hypercall_kafl_lock(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_INFO:
+            handle_hypercall_kafl_info(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_NEXT_PAYLOAD:
+            handle_hypercall_kafl_next_payload(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_PRINTF:
+            handle_hypercall_kafl_printf(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_PRINTK_ADDR:
+            handle_hypercall_kafl_printk_addr(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_PRINTK:
+            handle_hypercall_kafl_printk(run, cpu);
+            ret = 0;
+
+        /* user space only exit reasons */
+        case KVM_EXIT_KAFL_USER_RANGE_ADVISE:
+            handle_hypercall_kafl_user_range_advise(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_USER_SUBMIT_MODE:
+            handle_hypercall_kafl_user_submit_mode(run, cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_USER_FAST_ACQUIRE:
+            if(handle_hypercall_kafl_next_payload(run, cpu)){
+                handle_hypercall_kafl_cr3(run, cpu);
+                handle_hypercall_kafl_acquire(run, cpu);
+            }
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_TOPA_MAIN_FULL:
+            pt_handle_overflow(cpu);
+            ret = 0;
+            break;
+        case KVM_EXIT_KAFL_USER_ABORT:
+            handle_hypercall_kafl_user_abort(run, cpu);
+            ret = 0;
+            break;
+
+#ifdef CONFIG_REDQUEEN
+        case KVM_EXIT_DEBUG:
+            kvm_arch_get_registers(cpu);
+            if(!handle_hypercall_kafl_hook(run, cpu)){
+                ret = kvm_arch_handle_exit(cpu, run);
+            }
+            else {
+                ret = 0;
+            }
+            break;
+#endif
+#endif
+
         case KVM_EXIT_SYSTEM_EVENT:
             switch (run->system_event.type) {
             case KVM_SYSTEM_EVENT_SHUTDOWN:
@@ -2083,6 +2203,9 @@ int kvm_cpu_exec(CPUState *cpu)
             ret = kvm_arch_handle_exit(cpu, run);
             break;
         }
+#ifdef CONFIG_PROCESSOR_TRACE
+            pt_post_kvm_run(cpu);
+#endif
     } while (ret == 0);
 
     cpu_exec_end(cpu);

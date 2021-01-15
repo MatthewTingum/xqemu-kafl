@@ -1923,6 +1923,17 @@ ETEXI
         .flags      = "p",
     },
 
+#if defined(CONFIG_PROCESSOR_TRACE)
+    {
+        .name       = "pt",
+        .args_type  = "item:s?",
+        .params     = "[subcommand]",
+        .help       = "show various option to configure Intel Processor Tracing",
+        .cmd        = hmp_info_help,
+        .sub_table  = hmp_pt_cmds,
+    },
+#endif
+
 STEXI
 @end table
 ETEXI
